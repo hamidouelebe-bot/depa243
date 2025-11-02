@@ -3,6 +3,13 @@ export type RegistrationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type AppUserRole = 'TECHNICIAN' | 'ADMIN' | 'EDITOR' | 'PUBLIC';
 
+export enum RegistrationStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+
 // --------------- TABLE TYPES ----------------
 export interface Technician {
   id: string;
