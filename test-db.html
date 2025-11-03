@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Connection Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .loading {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Database Connection Test</h1>
+        <p class="subtitle">Test your Neon database connection</p>
+        
+        <button id="testBtn" onclick="testConnection()">Run Connection Test</button>
+        
+        <div id="results"></div>
+    </div>
+
+    <script type="module">
+        import { sql } from './services/neon.ts';
+
+        window.testConnection = async function() {
+            const btn = document.getElementById('testBtn');
+            const results = document.getElementById('results');
+            
+            btn.disabled = true;
+            results.className = 'loading';
+            results.textContent = '🔄 Testing connection...\n';
+            
+            try {
+                // Test 1: Simple query
+                results.textContent += '\n📊 Test 1: Running simple query...';
+                const result = await sql`SELECT NOW() as current_time, version() as pg_version`;
+                results.textContent += '\n✅ Connection successful!';
+                results.textContent += `\n   Server time: ${result[0].current_time}`;
+                results.textContent += `\n   PostgreSQL: ${result[0].pg_version.split(' ')[1]}`;
+                
+                // Test 2: Check tables
+                results.textContent += '\n\n📊 Test 2: Checking database schema...';
+                const tables = await sql`
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public' 
+                    ORDER BY table_name
+                `;
+                
+                if (tables.length === 0) {
+                    results.textContent += '\n⚠️  No tables found!';
+                    results.textContent += '\n   You need to run neon-schema.sql in your Neon SQL Editor';
+                    results.className = 'info';
+                } else {
+                    results.textContent += `\n✅ Found ${tables.length} tables:`;
+                    tables.forEach(t => {
+                        results.textContent += `\n   - ${t.table_name}`;
+                    });
+                    
+                    // Test 3: Count records
+                    results.textContent += '\n\n📊 Test 3: Checking table data...';
+                    const expectedTables = ['technicians', 'reviews', 'users', 'site_settings'];
+                    
+                    for (const tableName of expectedTables) {
+                        const tableExists = tables.some(t => t.table_name === tableName);
+                        if (tableExists) {
+                            // Use a simple approach - execute separate queries for each table
+                            let count;
+                            if (tableName === 'technicians') {
+                                count = await sql`SELECT COUNT(*) as count FROM technicians`;
+                            } else if (tableName === 'reviews') {
+                                count = await sql`SELECT COUNT(*) as count FROM reviews`;
+                            } else if (tableName === 'users') {
+                                count = await sql`SELECT COUNT(*) as count FROM users`;
+                            } else if (tableName === 'site_settings') {
+                                count = await sql`SELECT COUNT(*) as count FROM site_settings`;
+                            }
+                            if (count) {
+                                results.textContent += `\n   - ${tableName}: ${count[0].count} records`;
+                            }
+                        }
+                    }
+                    
+                    results.textContent += '\n\n✅ All tests passed! Your database is working perfectly! 🎉';
+                    results.className = 'success';
+                }
+                
+            } catch (error) {
+                results.className = 'error';
+                results.textContent = '❌ Connection failed!\n\n';
+                results.textContent += `Error: ${error.message}\n\n`;
+                
+                if (error.message.includes('Missing')) {
+                    results.textContent += '💡 Tips:\n';
+                    results.textContent += '   1. Make sure you have a .env file\n';
+                    results.textContent += '   2. Add: VITE_DATABASE_URL=postgresql://...\n';
+                    results.textContent += '   3. Restart the dev server (npm run dev)';
+                } else if (error.message.includes('password')) {
+                    results.textContent += '💡 Tip: Check your database password in .env file';
+                } else {
+                    results.textContent += '💡 Check that:\n';
+                    results.textContent += '   - Your .env file has VITE_DATABASE_URL set\n';
+                    results.textContent += '   - The connection string is correct\n';
+                    results.textContent += '   - You restarted the dev server';
+                }
+            } finally {
+                btn.disabled = false;
+            }
+        };
+    </script>
+</body>
+</html>

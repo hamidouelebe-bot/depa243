@@ -3,50 +3,32 @@ import { db } from './database';
 
 export const technicianService = {
   getAll: async (): Promise<Technician[]> => {
-    return db.getTechnicians();
+    return await db.getTechnicians();
   },
 
-  getById: async (id: string): Promise<Technician | undefined> => {
-    const technicians = db.getTechnicians();
-    return technicians.find(t => t.id === id);
+  getById: async (id: string): Promise<Technician | null> => {
+    return await db.getTechnicianById(id);
   },
 
-  add: async (data: Omit<Technician, 'id' | 'registration_status'>): Promise<Technician> => {
-    const technicians = db.getTechnicians();
-    const newTechnician: Technician = {
+  add: async (data: Omit<Technician, 'id' | 'registration_status' | 'created_at' | 'updated_at'>): Promise<Technician | null> => {
+    const newTechnician = {
       ...data,
-      id: `tech_${Date.now()}`,
-      registration_status: RegistrationStatus.PENDING,
+      registration_status: 'PENDING' as RegistrationStatus,
+      negotiable_per_job: data.negotiable_per_job || false
     };
-    technicians.push(newTechnician);
-    db.setTechnicians(technicians);
-    return newTechnician;
+    return await db.addTechnician(newTechnician);
   },
 
-  update: async (id: string, data: Partial<Omit<Technician, 'id'>>): Promise<Technician | undefined> => {
-    const technicians = db.getTechnicians();
-    const index = technicians.findIndex(t => t.id === id);
-    if (index !== -1) {
-      technicians[index] = { ...technicians[index], ...data };
-      db.setTechnicians(technicians);
-      return technicians[index];
-    }
-    return undefined;
+  update: async (id: string, data: Partial<Omit<Technician, 'id'>>): Promise<Technician | null> => {
+    return await db.updateTechnician(id, data);
   },
 
   delete: async (id: string): Promise<boolean> => {
-    let technicians = db.getTechnicians();
-    const initialLength = technicians.length;
-    technicians = technicians.filter(t => t.id !== id);
-    if (technicians.length < initialLength) {
-      db.setTechnicians(technicians);
-      return true;
-    }
-    return false;
+    return await db.deleteTechnician(id);
   },
   
   findByCredentials: async (login: string, pass: string): Promise<Technician | undefined> => {
-    const technicians = db.getTechnicians();
+    const technicians = await db.getTechnicians();
     return technicians.find(t => (t.login_email === login || t.contact_1 === login) && t.password_hash === pass);
   }
 };

@@ -2,56 +2,45 @@ import { Review } from '../types';
 import { db } from './database';
 
 export const reviewService = {
-  add: async (reviewData: Omit<Review, 'id' | 'status'>): Promise<Review> => {
-    const reviews = db.getReviews();
-    const newReview: Review = {
+  add: async (reviewData: Omit<Review, 'id' | 'status' | 'created_at'>): Promise<Review | null> => {
+    const newReview = {
       ...reviewData,
-      id: `rev_${Date.now()}`,
-      status: 'PENDING',
+      status: 'PENDING' as const,
     };
-    reviews.push(newReview);
-    db.setReviews(reviews);
-    return newReview;
+    return await db.addReview(newReview);
   },
   
   getAll: async (): Promise<Review[]> => {
-    return db.getReviews();
+    return await db.getReviews();
   },
 
   getAllPending: async (): Promise<Review[]> => {
-    const reviews = db.getReviews();
+    const reviews = await db.getReviews();
     return reviews.filter(r => r.status === 'PENDING');
   },
 
   getAllApprovedByTechnicianId: async (technicianId: string): Promise<Review[]> => {
-    const reviews = db.getReviews();
-    return reviews.filter(r => r.technicianId === technicianId && r.status === 'APPROVED');
+    const reviews = await db.getReviewsByTechnicianId(technicianId);
+    return reviews.filter(r => r.status === 'APPROVED');
   },
 
   getAllApproved: async (): Promise<Review[]> => {
-    const reviews = db.getReviews();
+    const reviews = await db.getReviews();
     return reviews.filter(r => r.status === 'APPROVED');
   },
 
   updateStatus: async (reviewId: string, status: 'APPROVED' | 'REJECTED'): Promise<boolean> => {
-    const reviews = db.getReviews();
-    const index = reviews.findIndex(r => r.id === reviewId);
-    if (index !== -1) {
-      reviews[index].status = status;
-      db.setReviews(reviews);
-      return true;
-    }
-    return false;
+    const result = await db.updateReview(reviewId, { status });
+    return result !== null;
   },
 
   deleteByTechnicianId: async (technicianId: string): Promise<boolean> => {
-    let reviews = db.getReviews();
-    const initialLength = reviews.length;
-    reviews = reviews.filter(r => r.technicianId !== technicianId);
-    if (reviews.length < initialLength) {
-        db.setReviews(reviews);
-        return true;
+    const reviews = await db.getReviewsByTechnicianId(technicianId);
+    let deleted = false;
+    for (const review of reviews) {
+      const success = await db.deleteReview(review.id);
+      if (success) deleted = true;
     }
-    return false;
+    return deleted;
   },
 };

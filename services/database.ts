@@ -1,185 +1,390 @@
-import { Technician, Review, User, RegistrationStatus, SiteSettings } from '../types';
-import { defaultSettings } from '../constants';
+import { Technician, Review, User, SiteSettings } from '../types';
+import { sql, executeQuery } from './neon';
 
-const DB_KEY = 'handy-pro-connect-db';
-
-interface DatabaseSchema {
-  technicians: Technician[];
-  reviews: Review[];
-  users: User[];
-  settings: SiteSettings;
-}
-
-const getDefaultData = (): DatabaseSchema => ({
-  technicians: [
-      {
-        id: 'tech_1',
-        full_name: 'Jean Kabila',
-        contact_1: '0812345678',
-        commune: 'Lubumbashi',
-        skills: ['Plomberie', 'Électricité'],
-        short_description: 'Plombier et électricien expérimenté avec 10 ans d\'expérience. Service rapide et fiable.',
-        price_per_hour: 25,
-        negotiable_per_job: true,
-        registration_status: RegistrationStatus.APPROVED,
-        login_email: 'jean.kabila@example.com',
-        password_hash: 'password123'
-      },
-      {
-        id: 'tech_2',
-        full_name: 'Marie Ilunga',
-        contact_1: '0998765432',
-        contact_2: '0823456789',
-        commune: 'Kampemba',
-        skills: ['Peinture', 'Carrelage'],
-        short_description: 'Artiste peintre et carreleuse professionnelle. Transformez votre maison avec des finitions impeccables.',
-        price_per_hour: 20,
-        registration_status: RegistrationStatus.APPROVED,
-        login_email: 'marie.ilunga@example.com',
-        password_hash: 'password123'
-      },
-      {
-        id: 'tech_3',
-        full_name: 'Pierre Numbi',
-        commune: 'Katuba',
-        skills: ['Maçonnerie'],
-        short_description: 'Maçon qualifié pour tous vos travaux de construction et de rénovation.',
-        registration_status: RegistrationStatus.PENDING,
-        login_email: 'pierre.numbi@example.com',
-        password_hash: 'password123',
-        negotiable_per_job: true,
-      },
-      {
-        id: 'tech_4',
-        full_name: 'Aline Mongo',
-        contact_1: '0811122334',
-        commune: 'Ruashi',
-        skills: ['Jardinage'],
-        short_description: 'Passionnée de jardinage, j\'entretiens vos espaces verts.',
-        price_per_hour: 15,
-        registration_status: RegistrationStatus.REJECTED,
-        login_email: 'aline.mongo@example.com',
-        password_hash: 'password123'
-      },
-       {
-        id: 'tech_5',
-        full_name: 'David Tshisekedi',
-        contact_1: '0977777777',
-        commune: 'Kamalondo',
-        skills: ['Climatisation', 'Réparation d\'appareils'],
-        short_description: 'Spécialiste en climatisation et réparation de gros électroménagers. Intervention rapide.',
-        price_per_hour: 30,
-        registration_status: RegistrationStatus.APPROVED,
-        login_email: 'david.t@example.com',
-        password_hash: 'password123'
-      },
-      {
-        id: 'tech_6',
-        full_name: 'Fatou Diop',
-        contact_1: '0855555555',
-        commune: 'Kenya',
-        skills: ['Menuiserie'],
-        short_description: 'Menuisière créative pour meubles sur mesure et réparations bois.',
-        price_per_hour: 22,
-        registration_status: RegistrationStatus.PENDING,
-        password_hash: 'password123',
-        negotiable_per_job: true
-      },
-  ],
-  reviews: [
-      { id: 'rev_1', technicianId: 'tech_1', authorName: 'Alice', authorPhone: '0811111111', rating: 5, comment: 'Excellent travail, très professionnel et rapide !', status: 'APPROVED' },
-      { id: 'rev_2', technicianId: 'tech_2', authorName: 'Bob', authorPhone: '0822222222', rating: 4, comment: 'Bonne peintre, mais un peu en retard.', status: 'APPROVED' },
-      { id: 'rev_3', technicianId: 'tech_1', authorName: 'Charlie', authorPhone: '0833333333', rating: 5, comment: 'Je recommande vivement Jean. Il a résolu mon problème de plomberie en un rien de temps.', status: 'PENDING' },
-  ],
-  users: [
-    { id: 'user_admin', username: 'admin', password_hash: 'admin', role: 'ADMIN' },
-  ],
-  settings: defaultSettings,
-});
-
-
+/**
+ * Database service using Neon Postgres as the backend
+ * This replaces the previous localStorage implementation
+ */
 class Database {
-  private isInitialized = false;
-
-  constructor() {
-    this.initialize();
+  /**
+   * Get all technicians from the database
+   */
+  async getTechnicians(): Promise<Technician[]> {
+    try {
+      const result = await sql`
+        SELECT * FROM technicians 
+        ORDER BY created_at DESC
+      `;
+      return result as Technician[];
+    } catch (error) {
+      console.error('Error fetching technicians:', error);
+      return [];
+    }
   }
 
-  private initialize() {
-    if (this.isInitialized) return;
+  /**
+   * Get a single technician by ID
+   */
+  async getTechnicianById(id: string): Promise<Technician | null> {
     try {
-      const data = localStorage.getItem(DB_KEY);
-      if (!data) {
-        console.log('Initializing database with default data...');
-        const defaultData = getDefaultData();
-        localStorage.setItem(DB_KEY, JSON.stringify(defaultData));
+      const result = await sql`
+        SELECT * FROM technicians 
+        WHERE id = ${id}
+      `;
+      return result[0] as Technician || null;
+    } catch (error) {
+      console.error('Error fetching technician:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Add a new technician
+   */
+  async addTechnician(technician: Omit<Technician, 'id' | 'created_at' | 'updated_at'>): Promise<Technician | null> {
+    try {
+      const result = await sql`
+        INSERT INTO technicians (
+          full_name, contact_1, contact_2, commune, skills,
+          short_description, price_per_hour, negotiable_per_job,
+          registration_status, login_email, password_hash
+        ) VALUES (
+          ${technician.full_name},
+          ${technician.contact_1 || null},
+          ${technician.contact_2 || null},
+          ${technician.commune},
+          ${technician.skills},
+          ${technician.short_description || null},
+          ${technician.price_per_hour || null},
+          ${technician.negotiable_per_job || false},
+          ${technician.registration_status},
+          ${technician.login_email || null},
+          ${technician.password_hash}
+        )
+        RETURNING *
+      `;
+      return result[0] as Technician || null;
+    } catch (error) {
+      console.error('Error adding technician:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update an existing technician
+   */
+  async updateTechnician(id: string, updates: Partial<Technician>): Promise<Technician | null> {
+    try {
+      // Build SET clause dynamically
+      const setClauses: string[] = [];
+      const params: any[] = [id];
+      let paramIndex = 2;
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (key !== 'id' && key !== 'created_at' && key !== 'updated_at') {
+          setClauses.push(`${key} = $${paramIndex}`);
+          params.push(value);
+          paramIndex++;
+        }
       }
-      this.isInitialized = true;
+
+      if (setClauses.length === 0) return null;
+
+      // Execute raw SQL query
+      const query = `
+        UPDATE technicians 
+        SET ${setClauses.join(', ')}, updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `;
+
+      const result = await executeQuery<Technician>(query, params);
+      return result[0] || null;
     } catch (error) {
-      console.error("Failed to initialize database:", error);
+      console.error('Error updating technician:', error);
+      return null;
     }
   }
 
-  private read(): DatabaseSchema {
+  /**
+   * Delete a technician
+   */
+  async deleteTechnician(id: string): Promise<boolean> {
     try {
-      const data = localStorage.getItem(DB_KEY);
-      if (!data) {
-        this.initialize();
-        return this.read();
+      await sql`DELETE FROM technicians WHERE id = ${id}`;
+      return true;
+    } catch (error) {
+      console.error('Error deleting technician:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get all reviews
+   */
+  async getReviews(): Promise<Review[]> {
+    try {
+      const result = await sql`
+        SELECT * FROM reviews 
+        ORDER BY created_at DESC
+      `;
+      return result as Review[];
+    } catch (error) {
+      console.error('Error fetching reviews:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get reviews for a specific technician
+   */
+  async getReviewsByTechnicianId(technicianId: string): Promise<Review[]> {
+    try {
+      const result = await sql`
+        SELECT * FROM reviews 
+        WHERE technician_id = ${technicianId}
+        ORDER BY created_at DESC
+      `;
+      return result as Review[];
+    } catch (error) {
+      console.error('Error fetching reviews:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Add a new review
+   */
+  async addReview(review: Omit<Review, 'id' | 'created_at'>): Promise<Review | null> {
+    try {
+      const result = await sql`
+        INSERT INTO reviews (
+          technician_id, author_name, author_phone,
+          rating, comment, status
+        ) VALUES (
+          ${review.technician_id},
+          ${review.author_name},
+          ${review.author_phone || null},
+          ${review.rating},
+          ${review.comment || null},
+          ${review.status}
+        )
+        RETURNING *
+      `;
+      return result[0] as Review || null;
+    } catch (error) {
+      console.error('Error adding review:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update a review
+   */
+  async updateReview(id: string, updates: Partial<Review>): Promise<Review | null> {
+    try {
+      const setClauses: string[] = [];
+      const params: any[] = [id];
+      let paramIndex = 2;
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (key !== 'id' && key !== 'created_at') {
+          setClauses.push(`${key} = $${paramIndex}`);
+          params.push(value);
+          paramIndex++;
+        }
       }
-      return JSON.parse(data);
+
+      if (setClauses.length === 0) return null;
+
+      const query = `
+        UPDATE reviews 
+        SET ${setClauses.join(', ')}
+        WHERE id = $1
+        RETURNING *
+      `;
+
+      const result = await executeQuery<Review>(query, params);
+      return result[0] || null;
     } catch (error) {
-      console.error("Failed to read from database:", error);
-      return getDefaultData();
+      console.error('Error updating review:', error);
+      return null;
     }
   }
 
-  private write(data: DatabaseSchema) {
+  /**
+   * Delete a review
+   */
+  async deleteReview(id: string): Promise<boolean> {
     try {
-      localStorage.setItem(DB_KEY, JSON.stringify(data));
+      await sql`DELETE FROM reviews WHERE id = ${id}`;
+      return true;
     } catch (error) {
-      console.error("Failed to write to database:", error);
+      console.error('Error deleting review:', error);
+      return false;
     }
   }
 
-  getTechnicians(): Technician[] {
-    return this.read().technicians;
-  }
-  
-  setTechnicians(technicians: Technician[]) {
-    const db = this.read();
-    db.technicians = technicians;
-    this.write(db);
+  /**
+   * Get all users
+   */
+  async getUsers(): Promise<User[]> {
+    try {
+      const result = await sql`SELECT * FROM users`;
+      return result as User[];
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
   }
 
-  getReviews(): Review[] {
-    return this.read().reviews;
+  /**
+   * Get a user by username
+   */
+  async getUserByUsername(username: string): Promise<User | null> {
+    try {
+      const result = await sql`
+        SELECT * FROM users 
+        WHERE username = ${username}
+      `;
+      return result[0] as User || null;
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      return null;
+    }
   }
 
-  setReviews(reviews: Review[]) {
-    const db = this.read();
-    db.reviews = reviews;
-    this.write(db);
+  /**
+   * Add a new user
+   */
+  async addUser(user: Omit<User, 'id'>): Promise<User | null> {
+    try {
+      const result = await sql`
+        INSERT INTO users (username, password_hash, role)
+        VALUES (${user.username}, ${user.password_hash}, ${user.role})
+        RETURNING *
+      `;
+      return result[0] as User || null;
+    } catch (error) {
+      console.error('Error adding user:', error);
+      return null;
+    }
   }
-  
-  getUsers(): User[] {
-    return this.read().users;
+
+  /**
+   * Update a user
+   */
+  async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+    try {
+      const setClauses: string[] = [];
+      const params: any[] = [id];
+      let paramIndex = 2;
+
+      for (const [key, value] of Object.entries(updates)) {
+        if (key !== 'id') {
+          setClauses.push(`${key} = $${paramIndex}`);
+          params.push(value);
+          paramIndex++;
+        }
+      }
+
+      if (setClauses.length === 0) return null;
+
+      const query = `
+        UPDATE users 
+        SET ${setClauses.join(', ')}
+        WHERE id = $1
+        RETURNING *
+      `;
+
+      const result = await executeQuery<User>(query, params);
+      return result[0] || null;
+    } catch (error) {
+      console.error('Error updating user:', error);
+      return null;
+    }
   }
-  
-  setUsers(users: User[]) {
-    const db = this.read();
-    db.users = users;
-    this.write(db);
+
+  /**
+   * Get site settings
+   */
+  async getSettings(): Promise<SiteSettings | null> {
+    try {
+      const result = await sql`
+        SELECT * FROM site_settings 
+        LIMIT 1
+      `;
+      return result[0] as SiteSettings || null;
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+      return null;
+    }
   }
-  
-  getSettings(): SiteSettings {
-      return this.read().settings;
+
+  /**
+   * Update site settings
+   */
+  async updateSettings(settings: Partial<SiteSettings>): Promise<SiteSettings | null> {
+    try {
+      const setClauses: string[] = [];
+      const settingsId = settings.id || '1';
+      const params: any[] = [settingsId];
+      let paramIndex = 2;
+
+      for (const [key, value] of Object.entries(settings)) {
+        if (key !== 'id') {
+          setClauses.push(`${key} = $${paramIndex}`);
+          params.push(value);
+          paramIndex++;
+        }
+      }
+
+      if (setClauses.length === 0) return null;
+
+      const query = `
+        UPDATE site_settings 
+        SET ${setClauses.join(', ')}, updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+      `;
+
+      const result = await executeQuery<SiteSettings>(query, params);
+      return result[0] || null;
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      return null;
+    }
   }
+
+  // Legacy methods for backward compatibility (synchronous to async migration)
+  // These methods are deprecated and should be replaced with their async counterparts
   
-  setSettings(settings: SiteSettings) {
-      const db = this.read();
-      db.settings = settings;
-      this.write(db);
+  /**
+   * @deprecated Use getTechnicians() instead
+   */
+  setTechnicians(_technicians: Technician[]) {
+    console.warn('setTechnicians is deprecated. Use addTechnician() or updateTechnician() instead.');
+  }
+
+  /**
+   * @deprecated Use getReviews() instead
+   */
+  setReviews(_reviews: Review[]) {
+    console.warn('setReviews is deprecated. Use addReview() or updateReview() instead.');
+  }
+
+  /**
+   * @deprecated Use getUsers() instead
+   */
+  setUsers(_users: User[]) {
+    console.warn('setUsers is deprecated. Use addUser() or updateUser() instead.');
+  }
+
+  /**
+   * @deprecated Use updateSettings() instead
+   */
+  setSettings(_settings: SiteSettings) {
+    console.warn('setSettings is deprecated. Use updateSettings() instead.');
   }
 
 }
